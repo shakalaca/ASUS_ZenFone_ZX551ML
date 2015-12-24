@@ -29,6 +29,8 @@
 #define DISABLE_CHARGING_AT_LOW_TEMP false
 #define VWARN1_CFG_REG	0x3C
 #define VPROG2_CFG_REG	0xAD
+#define PBCONFIG_REG		0x29
+
 #define THERMAL_CTRL		1
 
 static unsigned int  battery_current;
@@ -1756,7 +1758,8 @@ int asus_battery_init(
 )
 {
         int ret=0;
-        drv_status_t drv_sts;    
+	uint8_t data;
+        drv_status_t drv_sts;
 
         BAT_DBG("%s, %d, %d, 0x%08X\n", __func__, polling_time, critical_polling_time, test_flag);
 
@@ -1876,9 +1879,18 @@ int asus_battery_init(
 
 	//set PMIC voltage drop warning
 	intel_scu_ipc_iowrite8(VWARN1_CFG_REG, 0xFF);
-	if(Read_PROJ_ID()==PROJ_ID_ZX550ML) {
-		//set PMIC VPROG2 1V8 default on in ZX550ML
-		intel_scu_ipc_iowrite8(VPROG2_CFG_REG, 0x4B);
+	//set PMIC VPROG2 1V8 default on in ZX550ML
+	intel_scu_ipc_iowrite8(VPROG2_CFG_REG, 0x4B);
+	//set power key pressed for HW shutdown to 8s
+	ret = intel_scu_ipc_ioread8(PBCONFIG_REG, &data);
+	if (ret) {
+		BAT_DBG_E(" IPC Failed to read PBCONFIG_REG: %d\n", ret);
+	}
+	data |= (BIT(3));
+	data &= ~(BIT(2)|BIT(1)|BIT(0));
+	ret = intel_scu_ipc_iowrite8(PBCONFIG_REG, data);
+	if (ret) {
+		BAT_DBG_E(" IPC Failed to write PBCONFIG_REG: %d\n", ret);
 	}
 #ifdef CONFIG_SMB1357_CHARGER
 	/* register switch device for invalid charger status */

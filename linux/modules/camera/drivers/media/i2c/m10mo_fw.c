@@ -49,6 +49,7 @@
 #define M10MO_FW_LOG_MAX_NAME_LEN (128)
 
 #define M10MO_FW_DUMP_PATH      "/data/M10MO_dump.bin"
+#define M10MO_CALI_DATA_DUMP_PATH      "/data/M10MO_cali_data_dump.bin"
 #define M10MO_FW_NAME           "M10MO_fw.bin"
 #define M10MO_DIT_FW_NAME       "M10MO_DIT_fw.bin"
 #define M10MO_SHD_NAME           "ASUS_SHD.bin"
@@ -577,7 +578,77 @@ out_file:
 	return err;
 }
 
+int m10mo_dump_cali_data(struct m10mo_device *m10mo_dev)
+{
+	struct v4l2_subdev *sd = &m10mo_dev->sd;
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct file *fp;
+	mm_segment_t old_fs;
+	u8 *buf;
+	u32 addr, unit, count;
+	int i;
+	int err;
 
+	dev_dbg(&client->dev, "Begin calibration data dump to file %s\n", M10MO_CALI_DATA_DUMP_PATH);
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	fp = filp_open(M10MO_CALI_DATA_DUMP_PATH,
+		O_WRONLY|O_CREAT|O_TRUNC, S_IRUGO|S_IWUGO|S_IXUSR);
+	if (IS_ERR(fp)) {
+		dev_err(&client->dev,
+			"failed to open %s, err %ld\n",
+			M10MO_CALI_DATA_DUMP_PATH, PTR_ERR(fp));
+		err = -ENOENT;
+		goto out_file;
+	}
+
+	err = m10mo_to_fw_access_mode(m10mo_dev);
+	if (err)
+		goto out_close;
+
+	buf = kmalloc(DUMP_BLOCK_SIZE, GFP_KERNEL);
+	if (!buf) {
+		dev_err(&client->dev, "Failed to allocate memory\n");
+		err = -ENOMEM;
+		goto out_close;
+	}
+
+	err = m10mo_writeb(sd, CATEGORY_FLASHROM,
+			   REG_FW_READ, REG_FW_READ_CMD_READ);
+
+	if (err) {
+		dev_err(&client->dev, "FW read cmd failed %d\n", err);
+		goto out_mem_free;
+	}
+
+	addr = M10MO_FLASH_READ_BASE_ADDR + 0x1F4000;
+	unit = I2C_DUMP_SIZE;
+	count = FLASH_SECTOR_SIZE / I2C_DUMP_SIZE;
+	for (i = 0; i < count; i++) {
+		err = m10mo_memory_dump(m10mo_dev,
+					unit,
+					addr + (i * unit),
+					buf);
+		if (err < 0) {
+			dev_err(&client->dev, "Memory dump failed %d\n", err);
+			goto out_mem_free;
+		}
+		vfs_write(fp, buf, unit, &fp->f_pos);
+	}
+	dev_dbg(&client->dev, "End of calibration data dump to file\n");
+
+out_mem_free:
+	kfree(buf);
+out_close:
+	if (!IS_ERR(fp))
+		filp_close(fp, current->files);
+out_file:
+	set_fs(old_fs);
+
+	return err;
+}
 
 static void m10mo_gen_log_name(char *name, char *prefix)
 {

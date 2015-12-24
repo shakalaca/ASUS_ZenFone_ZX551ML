@@ -84,8 +84,28 @@ static struct mutex g_sMMapMutex;
 #endif
 static void MMapPMROpen(struct vm_area_struct* ps_vma)
 {
+	PMR *psPMR = ps_vma->vm_private_data;
 	/* Our VM flags should ensure this function never gets called */
-	PVR_ASSERT(0);
+	PVR_DPF((PVR_DBG_WARNING,
+		"%s: Unexpected mmap open call, this is probably an application bug.",
+			 __func__));
+	PVR_DPF((PVR_DBG_WARNING,
+		"%s: vma struct: 0x%p, vAddr: %#lX, length: %#lX, PMR pointer: 0x%p",
+			 __func__,
+			 ps_vma,
+			 ps_vma->vm_start,
+			 ps_vma->vm_end - ps_vma->vm_start,
+			 psPMR));
+
+	/* In case we get called anyway let's do things right by increasing the refcount and
+	 * locking down the physical addresses. */
+	PMRRefPMR(psPMR);
+
+	if (PMRLockSysPhysAddresses(psPMR, PAGE_SHIFT) != PVRSRV_OK)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: Could not lock down physical addresses, aborting.", __func__));
+		PMRUnrefPMR(psPMR);
+	}
 }
 
 static void MMapPMRClose(struct vm_area_struct *ps_vma)

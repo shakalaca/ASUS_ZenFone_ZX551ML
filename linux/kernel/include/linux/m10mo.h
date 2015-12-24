@@ -317,6 +317,7 @@ int writeDummyVersion(struct m10mo_device *m10mo_dev);
 int readDitVersion(struct m10mo_device *m10mo_dev);
 bool isNeedUpdateFwWhenBoot(void);
 int m10mo_dump_fw(struct m10mo_device *m10mo_dev);
+int m10mo_dump_cali_data(struct m10mo_device *m10mo_dev);
 int m10mo_get_fw_address_count(void);
 int m10mo_get_isp_fw_version_string(struct m10mo_device *dev, char *buf,
 		int len, int fw_address_id);
@@ -1279,7 +1280,6 @@ static const unsigned short iso_table[][2] = {
 extern const struct M10MO_AF_Parameters m10m0_af_parameters[];
 
 #endif	/* M10MO_H */
-
 
 
 

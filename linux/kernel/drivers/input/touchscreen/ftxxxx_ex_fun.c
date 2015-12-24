@@ -75,13 +75,13 @@ static unsigned char CTPM_FW_ZE551ML_85[] = {
 #include "ASUS_ZE551ML_5446_0x80_0x41_20141212_app.i"
 };
 static unsigned char CTPM_FW_ZX551ML_61[] = {
-#include "ASUS_ZX551ML_5446_0x61_0x42_20151020_app.i"
+#include "ASUS_ZX551ML_5446_0x61_0x43_20151111_app.i"
 };
 static unsigned char CTPM_FW_ZX550ML_71[] = {
 #include "ASUS_ZX550ML_5446_0x71_0x22_20141230_app.i"
 };
 static unsigned char CTPM_FW_ZX551ML_81[] = {
-#include "ASUS_ZX551ML_5446_0x81_0x42_20151020_app.i"
+#include "ASUS_ZX551ML_5446_0x81_0x43_20151111_app.i"
 };
 
 //zax 20141116 ++++++++++++++

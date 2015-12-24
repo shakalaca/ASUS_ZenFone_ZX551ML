@@ -2900,6 +2900,9 @@ static int m10mo_set_shot_mode(struct v4l2_subdev *sd, unsigned int val)
 	case EXT_ISP_SHOT_MODE_TIMEREWIND:
 	    dev->shot_mode = CAP_TIMEREWIND;
 		break;
+	case EXT_ISP_SHOT_MODE_PANOSELFIE:
+	    dev->shot_mode = CAP_SPHERE;
+		break;
 #if 0
 	case EXT_ISP_SHOT_MODE_AUTO:
 		dev->shot_mode = SHOT_MODE_AUTO;
@@ -5515,6 +5518,22 @@ leave:
 	return ret;
 }
 
+static int dump_cali_data(struct m10mo_device *dev)
+{
+	int ret = 0;
+	mutex_lock(&dev->input_lock);
+	if (dev->power == 1) {
+		ret = -EBUSY;
+		goto leave;
+	}
+	__m10mo_s_power(&dev->sd, 1, true);
+	m10mo_dump_cali_data(dev);
+	__m10mo_s_power(&dev->sd, 0, true);
+leave:
+	mutex_unlock(&dev->input_lock);
+	return ret;
+}
+
 static int read_fw_checksum(struct m10mo_device *dev, u16 *result)
 {
 	int ret;
@@ -5857,6 +5876,15 @@ static ssize_t m10mo_flash_dump_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "done\n");
 }
 static DEVICE_ATTR(isp_fw_dump, S_IRUGO, m10mo_flash_dump_show, NULL);
+
+static ssize_t m10mo_flash_cali_data_dump_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct m10mo_device *m10_dev = dev_get_drvdata(dev);
+	dump_cali_data(m10_dev);
+	return scnprintf(buf, PAGE_SIZE, "done\n");
+}
+static DEVICE_ATTR(isp_cali_data_dump, S_IRUGO, m10mo_flash_cali_data_dump_show, NULL);
 
 static ssize_t m10mo_debug(struct device *dev, struct device_attribute *attr, const char *buf, size_t len)
 {
@@ -8957,6 +8985,7 @@ static struct attribute *sysfs_attrs_ctrl[] = {
 	&dev_attr_isp_checksum.attr,
 	&dev_attr_isp_flashfw.attr,
 	&dev_attr_isp_fw_dump.attr,
+	&dev_attr_isp_cali_data_dump.attr,
 	&dev_attr_isp_update_status.attr,
 	&dev_attr_isp_spi.attr,
 	&dev_attr_isp_fw_id.attr,

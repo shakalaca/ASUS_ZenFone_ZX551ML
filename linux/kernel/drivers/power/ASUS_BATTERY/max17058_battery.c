@@ -77,6 +77,7 @@ static struct max17058_chip *g_max17058_chip;
 static int g_temp=25, g_soc=0;
 
 struct max17058_chip {
+	struct mutex lock;
 	struct i2c_client		*client;
 	struct delayed_work		work;
 	struct delayed_work		hand_work;
@@ -533,28 +534,28 @@ static void max17058_get_vcell(struct i2c_client *client)
 static void max17058_get_soc(struct i2c_client *client)
 {
 	struct max17058_chip *chip = i2c_get_clientdata(client);
-	u16 fg_soc = 0;
-	u8 soc_count = 0;
+	u16 fg_soc = 0, temp_soc=0;
 
+	mutex_lock(&chip->lock);
 	fg_soc = max17058_read_reg(client, max17058_SOC_REG);
 	if(fg_soc < 0){
 		GAUGE_ERR("%s failed to get soc\n", __func__);
 	}
 
-	chip->soc = ((u16)(fg_soc & 0xFF)<<8) + ((u16)(fg_soc & 0xFF00)>>8);
-	GAUGE_INFO("%s: chip->soc = %d, fg_soc = %d\n", __func__, chip->soc, fg_soc);
+	temp_soc = ((u16)(fg_soc & 0xFF)<<8) + ((u16)(fg_soc & 0xFF00)>>8);
+	GAUGE_INFO("%s: temp_soc = %d, fg_soc = %d\n", __func__, temp_soc, fg_soc);
 
 	if(INI_BITS == 19) {
-	    chip->soc = chip->soc/512;
+	    chip->soc = temp_soc/512;
 	}else if(INI_BITS == 18){
-	    chip->soc = chip->soc/256;
+	    if (smb1357_get_charging_status() == POWER_SUPPLY_STATUS_NOT_CHARGING)
+		temp_soc += 128;
+	    chip->soc = temp_soc/256;
 	}
-
-	if(chip->soc>100)	chip->soc = 100;
-	if((soc_count++)%5 == 0){
-	    soc_count = 0;
-	    GAUGE_INFO("%s: Get SOC = %d\n", __func__, chip->soc);
-	}
+	if (chip->soc>100)
+		chip->soc = 100;
+	GAUGE_INFO("%s: Get final SOC = %d\n", __func__, chip->soc);
+	mutex_unlock(&chip->lock);
 }
 
 #ifdef MAX17058_REG_POWERSUPPLY
@@ -595,8 +596,8 @@ int max17058_read_percentage(void)
 {
 	//GAUGE_INFO("%s start\n", __func__);
 	max17058_get_soc(g_max17058_chip->client);
-	g_soc = (g_max17058_chip->soc*100)/99;
-	GAUGE_INFO("%s ori soc=%d, final soc=%d\n", __func__, g_max17058_chip->soc, g_soc);
+	g_soc = g_max17058_chip->soc;
+	//GAUGE_INFO("%s ori soc=%d, final soc=%d\n", __func__, g_max17058_chip->soc, g_soc);
 	if (g_soc>100)
 		g_soc = 100;
 	return g_soc;
@@ -752,6 +753,8 @@ static int max17058_probe(struct i2c_client *client,
 	handle_model(client, LOAD_MODEL);
 
   	g_max17058_chip = chip;
+	/* initial mutex */
+	mutex_init(&chip->lock);
 	INIT_DELAYED_WORK(&chip->work, max17058_work);
 	//INIT_DELAYED_WORK(&chip->hand_work, max17058_handle_work);
 	schedule_delayed_work(&chip->work, 5*HZ);
