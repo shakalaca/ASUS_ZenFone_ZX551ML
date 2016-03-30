@@ -43,7 +43,7 @@
 #define M10MO_MIPI_FREQ_1			(980700000/2)
 #define M10MO_INIT_TIMEOUT		30000
 #define M10MO_PARAMETER_MODE_TIMEOUT 1000
-#define M10MO_BACK_TO_PR_TIMEOUT     4000
+#define M10MO_BACK_TO_PR_TIMEOUT     2000
 #define M10MO_BOOT_TIMEOUT		5000
 #define POLL_NUM			20
 
@@ -208,7 +208,7 @@ struct m10mo_device {
 	struct mutex m10mo_request_cmd_lock;
 	struct mutex m10mo_lens_work_lock;
 //	struct mutex m10mo_lens_state_machine_lock;
-//	struct mutex m10mo_ois_work_lock;
+
 	struct m10mo_spi *spi;
 	struct m10mo_monitor_params monitor_params;
 	struct m10mo_mipi_params mipi_params;
@@ -259,11 +259,14 @@ struct m10mo_device {
 	struct workqueue_struct *cancel_auto_focus_wq;
 	struct workqueue_struct *cancel_optical_zoom_wq;
 	struct workqueue_struct *auto_update_wq;
-	struct workqueue_struct *gpio_set_ois_wq;
+	struct workqueue_struct *gpio_set_check_if_m10mo_stream_on_wq;
+    struct workqueue_struct *gpio_set_m10mo_power_on_wq;
 	volatile u8 lens_state_machine;
 	volatile u8 cancel_irq_flag;
 	struct wake_lock m10mo_wake_lock;
 	struct wake_lock m10mo_update_wake_lock;
+	u8 front_camera_power;
+	u8 m10mo_gpio_set_after_power_on_before_streaming_flag;
 //    struct workqueue_struct *optical_zoom_wq;
 //	struct workqueue_struct *auto_focus_wq;
 };
@@ -348,7 +351,7 @@ int m10mo_USB_status(bool status);
 extern u32 ene_fw_version;
 int io3730_auto_fw_update(struct m10mo_device *m10mo_dev);
 int checkIspNvram(struct m10mo_device *m10mo_dev);
-//void m10mo_gpio_set_ois_mode(int mode);
+void m10mo_gpio_set_power_on(void);
 
 extern const struct m10mo_fw_ops fw_type1_5_ops;
 extern const struct m10mo_fw_ops fw_type2_ops;

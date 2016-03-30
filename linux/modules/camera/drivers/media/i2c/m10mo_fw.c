@@ -656,6 +656,7 @@ static void m10mo_gen_log_name(char *name, char *prefix)
 
 	time = ktime_to_ms(ktime_get());
 	snprintf(name, M10MO_FW_LOG_MAX_NAME_LEN, "%s_%lld%s", prefix, time, M10MO_FW_LOG_SUFFIX);
+	printk("m10mo log path is %s\n", name);
 }
 
 int m10mo_dump_string_log3(struct v4l2_subdev *sd)
@@ -1746,6 +1747,7 @@ int m10mo_program_device_erase_all_flash_all(struct m10mo_device *m10mo_dev)
 
 release_fw:
 	release_firmware(fw);
+	release_firmware(fw_info);
 	return ret;
 }
 
@@ -1868,6 +1870,7 @@ int m10mo_program_device_erase_all_flash_partial(struct m10mo_device *m10mo_dev)
 
 release_fw:
 	release_firmware(fw);
+	release_firmware(fw_info);
 	return ret;
 }
 
@@ -2050,6 +2053,7 @@ int m10mo_program_device(struct m10mo_device *m10mo_dev, int autoupdate ,u32 ver
 
 release_fw:
 	release_firmware(fw);
+	release_firmware(fw_info);
 	return ret;
 }
 

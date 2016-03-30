@@ -968,9 +968,15 @@ int smb1357_AC_in_current(void)
 			msleep(1000);
 			/* check again if cable still in for quick plug in/out action */
 			if (!gpio_get_value(smb1357_dev->pdata->inok_gpio)||usb_detect_flag) {
-				/* set charger into suspend mode: set 41h=0X40 */
+				/* disable missing polling: set 12h[5]=0 */
 				smb1357_set_writable(smb1357_dev, true);
-				smb1357_write(smb1357_dev, CMD_IL_REG, 0x40);
+				ret = smb1357_read(smb1357_dev, CFG_OTG_I_LIMIT_REG);
+				if (ret < 0)
+					goto out;
+				ret &= ~(BIT(5));
+				ret = smb1357_write(smb1357_dev, CFG_OTG_I_LIMIT_REG, ret);
+				if (ret < 0)
+					goto out;
 				gpio57_flag = 1;
 				gpio_direction_output(smb1357_dev->gpio_chrg_signal, 1);
 				msleep(1000);
@@ -1478,7 +1484,7 @@ static int smb1357_mains_get_property(struct power_supply *psy,
 				     union power_supply_propval *val)
 {
 	if (prop == POWER_SUPPLY_PROP_ONLINE) {
-		if(g_cable_status==AC_IN)
+		if ((g_cable_status==AC_IN)&&(dcp_mode!=3))
 			val->intval = 1;
 		else
 			val->intval = 0;
@@ -1496,7 +1502,7 @@ static int smb1357_usb_get_property(struct power_supply *psy,
 				   union power_supply_propval *val)
 {
 	if (prop == POWER_SUPPLY_PROP_ONLINE) {
-		if(g_cable_status==USB_IN)
+		if ((g_cable_status==USB_IN)||(dcp_mode==3))
 			val->intval = 1;
 		else
 			val->intval = 0;

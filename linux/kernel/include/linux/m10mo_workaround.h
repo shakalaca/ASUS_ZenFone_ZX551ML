@@ -9,7 +9,8 @@ int m10mo_read_laser(u8 len, u8 category, u8 reg, u32 *val);
 int m10mo_read_fac(u8 len, u8 category, u8 reg, u32 *val);
 int m10mo_write_fac(u8 len, u8 category, u8 reg, u32 val);
 int m10mo_s_power_fac(int on);
+int m10mo_s_power_for_ov5670(int on);
 int m10mo_status_fac(void);
 void notify_m10mo_atomisp_dead(void);
-
+void notify_m10mo_front_camera_power_status(u8 power);
 #endif

@@ -548,7 +548,6 @@ static void max17058_get_soc(struct i2c_client *client)
 	if(INI_BITS == 19) {
 	    chip->soc = temp_soc/512;
 	}else if(INI_BITS == 18){
-	    if (smb1357_get_charging_status() == POWER_SUPPLY_STATUS_NOT_CHARGING)
 		temp_soc += 128;
 	    chip->soc = temp_soc/256;
 	}

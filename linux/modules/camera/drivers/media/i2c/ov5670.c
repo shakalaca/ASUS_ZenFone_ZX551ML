@@ -38,6 +38,9 @@
 #include <media/v4l2-chip-ident.h>
 #include <linux/io.h>
 #include "ov5670.h"
+#include <linux/m10mo_workaround.h>
+#include <linux/HWVersion.h>
+#include <asm/intel-mid.h>
 //#include "decode_lib.h"
 
 #define OV5670_DEBUG_EN 0
@@ -532,14 +535,14 @@ static long __ov5670_set_exposure(struct v4l2_subdev *sd, int coarse_itg,
 		return ret;
 
 	  if(gain >= 1*128 && gain < 2*128){
-		  printk(KERN_ALERT"ASUSov5670 0x366A=0x00");
-		  ov5670_write_reg(client, OV5670_8BIT, 0x366A, 0x00);
-	  }else if(gain >= 2*128 && gain < 4*128){
 		  printk(KERN_ALERT"ASUSov5670 0x366A=0x01");
 		  ov5670_write_reg(client, OV5670_8BIT, 0x366A, 0x01);
-	  }else if(gain >= 4*128 && gain < 8*128){
+	  }else if(gain >= 2*128 && gain < 4*128){
 		  printk(KERN_ALERT"ASUSov5670 0x366A=0x03");
 		  ov5670_write_reg(client, OV5670_8BIT, 0x366A, 0x03);
+	  }else if(gain >= 4*128 && gain < 8*128){
+		  printk(KERN_ALERT"ASUSov5670 0x366A=0x07");
+		  ov5670_write_reg(client, OV5670_8BIT, 0x366A, 0x07);
 	  }else if(gain >= 8*128){
 		  printk(KERN_ALERT"ASUSov5670 0x366A=0x07");
 		  ov5670_write_reg(client, OV5670_8BIT, 0x366A, 0x07);
@@ -1138,6 +1141,7 @@ static int ov5670_s_power(struct v4l2_subdev *sd, int on)
 //	struct i2c_client *client = v4l2_get_subdevdata(sd);
 
 	int ret = 0;
+    notify_m10mo_front_camera_power_status(on);
 	if (on == 0) {
 		ret = power_down(sd);
 		if (dev->vcm_driver && dev->vcm_driver->power_down)
@@ -1146,6 +1150,9 @@ static int ov5670_s_power(struct v4l2_subdev *sd, int on)
 
 		}
 	} else {
+        if(m10mo_status_fac()) {
+            (void) m10mo_s_power_for_ov5670(0);
+        }
 		if (dev->vcm_driver && dev->vcm_driver->power_up)
 			ret = dev->vcm_driver->power_up(sd);
 		if (ret)

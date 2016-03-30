@@ -496,20 +496,16 @@ static void gpio_keys_gpio_timer(unsigned long _data)
 			printk("Instant Camera Keyevent (%d) pushed.\n",button->code);
 		}
     }
-#if 0
-    if(Read_PROJ_ID() == PROJ_ID_ZX550ML){
-	if(state == 1 && type == EV_KEY && button->code == KEY_CAMERA_FOCUS)
-	{
-		m10mo_gpio_set_ois_mode(1);
-		wake_lock_timeout(&gpio_wake_lock, msecs_to_jiffies(2000));
+
+    if(Read_PROJ_ID() == PROJ_ID_ZX550ML) {
+	    if(state == 1 && type == EV_KEY && button->code == KEY_CAMERA) {
+		    printk(KERN_INFO "m10mo, gpio key to power on! \n");
+		    (void) m10mo_gpio_set_power_on();
+		    wake_lock_timeout(&gpio_wake_lock, msecs_to_jiffies(2000));
     	}
-	else if(state == 0 && type == EV_KEY && button->code == KEY_CAMERA_FOCUS)
-	{
-		m10mo_gpio_set_ois_mode(0);
-		wake_lock_timeout(&gpio_wake_lock, msecs_to_jiffies(2000));
-    	}
+
     }
-#endif
+
 	schedule_work(&bdata->work);
 }
 

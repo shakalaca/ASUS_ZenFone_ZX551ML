@@ -414,46 +414,6 @@ m10mo_lens_state_machine_out:
  * Returns 0 on success, or else negative errno.
 */
 
-#if 0
-// mode = 1 : enable S2
-// mode = 0 : disable S2 or it's mean Enable S1
-void m10mo_gpio_set_ois_mode(int mode){
-
-    struct m10mo_device *dev;
-	if(sdd == NULL) return;
-
-	dev = to_m10mo_sensor(sdd);
-    if(dev==NULL) return;
-
-//ois_status : 2  --> S2
-//ois_status : 1  --> S1
-//ois_status : 0  --> POWER OFF
-
-if(dev->power == 1){
-    if(mode == 1 && dev->m10mo_mode == M10MO_MONITOR_MODE_ZSL && ois_status !=2){
-
-	//write OIS S2
-    queue_delayed_work(dev->gpio_set_ois_wq, &m10mo_set_ois_s2_work, 0);
-	ois_status = 2;
-        printk("m10mo, ois mode = %x m10mo_mode = %x status = %x. \n", mode,dev->m10mo_mode,ois_status);
-    }else if(mode == 0 && dev->m10mo_mode == M10MO_MONITOR_MODE_ZSL && ois_status == 2){
-
-	//write OIS S1
-    queue_delayed_work(dev->gpio_set_ois_wq, &m10mo_set_ois_s1_work, 0);
-	ois_status = 1;
-        printk("m10mo, ois mode = %x m10mo_mode = %x status = %x\n", mode,dev->m10mo_mode,ois_status);
-    }
-}else{
-    if(ois_status != 0)
-	ois_status = 0;
-}
-
-
-}
-EXPORT_SYMBOL(m10mo_gpio_set_ois_mode);
-#endif
-
-
 int getOpenIntelISP(void){
     return openIntelISP;
 }
@@ -478,7 +438,7 @@ void startCapture(void){
 
     val = get_m10mo_wait_timeout_val(sdd, dev->requested_cmd);
     (void) m10mo_wait_mode_change(sdd, dev->requested_cmd, val);
-
+    dev->wait_irq_flag = M10MO_IRQ_COMMAND_AVAILABDLE;
 	printk("m10mo, @%s, Wait End!  \n", __func__);
     mutex_unlock(&dev->m10mo_request_cmd_lock);
     printk("@%s %d, UNLOCK m10mo_request_cmd_lock.\n", __func__, __LINE__);
@@ -958,6 +918,13 @@ int m10mo_request_cmd_effect(struct v4l2_subdev *sd, u8 requested_cmd, void* dat
 	printk("@%s %d start, requested_cmd = %d. Try to get the mutex lock. TRYing...TRYing...\n", __func__, __LINE__, requested_cmd);
 	mutex_lock(&dev->m10mo_request_cmd_lock);
 	dev->m10mo_request_cmd_lock_flag = 1;
+	if(!dev->stream) {
+	    if(requested_cmd == M10MO_START_AF ||
+		     requested_cmd == M10MO_START_OPTICAL_ZOOM) {
+			    printk("@%s %d start, requested_cmd is %d. app already stop preview, break here!!! \n", __func__, __LINE__, requested_cmd);
+			    goto out_m10mo_request_cmd_effect;
+			 }
+	}
     dev->requested_cmd = requested_cmd;
     printk("@%s %d start, dev->requested_cmd = %d. Successful to get the mutex lock.\n", __func__, __LINE__, dev->requested_cmd);
 
@@ -1172,14 +1139,21 @@ int m10mo_wait_mode_change(struct v4l2_subdev *sd, u8 mode, u32 timeout)
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	int ret;
 	u8 previous_state;
-    printk("m10mo, 56789  dev->cmd = 0x%x mode = 0x%x\n",dev->cmd, mode);
-	ret = wait_event_timeout(dev->irq_waitq, dev->cmd == mode, msecs_to_jiffies(timeout));
-	printk("m10mo, 98765  dev->cmd = 0x%x mode = 0x%x, ret is %d\n",dev->cmd, mode, ret);
+//    printk("m10mo, 56789  dev->cmd = 0x%x mode = 0x%x\n",dev->cmd, mode);
+//	ret = wait_event_timeout(dev->irq_waitq, dev->cmd == mode, msecs_to_jiffies(timeout));
+//	printk("m10mo, 98765  dev->cmd = 0x%x mode = 0x%x, ret is %d\n",dev->cmd, mode, ret);
+    printk("m10mo, 56789  dev->cmd = 0x%x mode = 0x%x\n",dev->cmd, dev->requested_cmd);
+	ret = wait_event_timeout(dev->irq_waitq, dev->cmd == dev->requested_cmd, msecs_to_jiffies(timeout));
+	printk("m10mo, 98765  dev->cmd = 0x%x mode = 0x%x, ret is %d\n",dev->cmd, dev->requested_cmd, ret);
 	if (ret > 0) {
 		return 0;
 	} else if (ret == 0) {
-		dev_err(&client->dev, "m10mo_wait_mode_change timed out. dev->cmd = %x mode = %x, timeout is %d\n",dev->cmd, mode, timeout);
+		dev_err(&client->dev, "m10mo_wait_mode_change timed out. dev->cmd = %x dev->requested_cmd = %x, timeout is %d\n",dev->cmd, dev->requested_cmd, timeout);
 
+		if(dev->requested_cmd == M10MO_MOVE_LENS_TO_PR) {
+		    printk("@m10mo_wait_mode_change. It is PR position timeout. Ignore it. dev->requested_cmd is %d \n", dev->requested_cmd);
+			return 0;
+		}
 		if(m10mo_trace_log_lock != DOWNLOAD_AVAILABLE) {
               return -ETIMEDOUT;
 		}
@@ -1199,6 +1173,8 @@ int __m10mo_param_mode_set(struct v4l2_subdev *sd)
 {
 	int ret;
 	u32 read_val;
+	u8 requested_cmd;
+    struct m10mo_device *dev = to_m10mo_sensor(sd);
 
     printk("@%s %d start\n", __func__, __LINE__);
 	(void) m10mo_readb(sd, CATEGORY_SYSTEM, SYSTEM_SYSMODE, &read_val);
@@ -1206,6 +1182,20 @@ int __m10mo_param_mode_set(struct v4l2_subdev *sd)
 	    printk(KERN_INFO "@%s, Already in parameter mode, no need to set again. \n", __func__);
 		return 0;
 	}
+	requested_cmd = dev->requested_cmd;
+	read_val = 0;
+	(void) m10mo_readb(sd, CATEGORY_LENS, 0x0b, &read_val);
+
+	if(requested_cmd == M10MO_START_AF) {
+		    dev->cancel_irq_flag = 1;
+		    __m10mo_reset_irq_wait_status();
+		    (void) m10mo_request_cmd_effect(sd, M10MO_ASUS_FOCUS_CANCEL, NULL);
+	} else if(requested_cmd == M10MO_START_OPTICAL_ZOOM) {
+		    dev->cancel_irq_flag = 1;
+		    __m10mo_reset_irq_wait_status();
+	        (void) m10mo_request_cmd_effect(sd, M10MO_ASUS_ZOOM_CANCEL, NULL);
+	}
+
 	ret = m10mo_request_cmd_effect(sd, M10MO_PARAMETER_MODE_REQUEST_CMD, NULL);
 	if (ret)
 		return ret;
@@ -1707,7 +1697,7 @@ static int m10mo_get_hal_i2c_wread(struct v4l2_subdev *sd, unsigned int *status)
 	cat      = (*status >> 16) & 0xFF;
 
 	ret = m10mo_readw(sd, cat, reg_addr, &reg_val);
-
+	printk("EXT_ISP_CID_M10MO_I2C_WORD_READ  %x\n",reg_val);
 	if(!ret){
 	     *status = reg_val;
 	} else {
@@ -2349,7 +2339,7 @@ static int __m10mo_s_power(struct v4l2_subdev *sd, int on, bool fw_update_mode)
 	        enable_irq(client->irq);
 			dev->disable_irq_flag = 0;
 		}
-		dev->cmd = M10MO_POWERING_ON;
+//		dev->cmd = M10MO_POWERING_ON;
 		ret = power_up(sd);
 		if (ret)
 			return ret;
@@ -2954,6 +2944,10 @@ static int m10mo_s_power(struct v4l2_subdev *sd, int on)
 {
 	int ret;
 	struct m10mo_device *dev = to_m10mo_sensor(sd);
+	if(dev->m10mo_gpio_set_after_power_on_before_streaming_flag) {
+	    dev->m10mo_gpio_set_after_power_on_before_streaming_flag = 0;
+		m10mo_USB_status(0);
+	}
 
 	mutex_lock(&dev->input_lock);
 	ret = __m10mo_s_power(sd, on, false);
@@ -5152,6 +5146,7 @@ static long m10mo_ioctl(struct v4l2_subdev *sd, unsigned int cmd,
 	    mutex_lock(&dev->m10mo_request_cmd_lock);
 		dev->requested_cmd = M10MO_SINGLE_CAPTURE_MODE;
 		dev->cmd = M10MO_NO_CMD_REQUEST;
+		dev->wait_irq_flag = M10MO_NOT_LENS_RELATED_BUSYING;
 		printk("@%s %d start, dev->requested_cmd = %d. Successful to get the mutex lock.\n", __func__, __LINE__, dev->requested_cmd);
         m10mo_send_still_capture_cmds(sdd);
 	    dev->lock_i2c_write_flag = 1;
@@ -9126,6 +9121,8 @@ static int m10mo_probe(struct i2c_client *client,
 	dev->m10mo_request_cmd_lock_flag = 0;
     dev->lock_i2c_write_flag = 0;
 	dev->cancel_irq_flag = 0;
+	dev->front_camera_power = 0;
+	dev->m10mo_gpio_set_after_power_on_before_streaming_flag = 0;
 
 	mutex_init(&dev->input_lock);
 	mutex_init(&dev->m10mo_request_cmd_lock);
@@ -9133,13 +9130,13 @@ static int m10mo_probe(struct i2c_client *client,
 	wake_lock_init(&dev->m10mo_wake_lock, WAKE_LOCK_SUSPEND, "m10mo_wakelock");
 	wake_lock_init(&dev->m10mo_update_wake_lock, WAKE_LOCK_SUSPEND, "m10mo_update_wake_lock");
 //	mutex_init(&dev->m10mo_lens_state_machine_lock);
-//    mutex_init(&dev->m10mo_ois_work_lock);
+
 	dev->lens_wq = create_singlethread_workqueue("m10mo_lens_wq");
 	dev->cancel_auto_focus_wq = create_singlethread_workqueue("m10mo_cancel_auto_focus_wq");
 	dev->cancel_optical_zoom_wq = create_singlethread_workqueue("m10mo_cancel_optical_zoom_wq");
 	dev->auto_update_wq = create_singlethread_workqueue("m10mo_auto_update_wq");
-	dev->gpio_set_ois_wq = create_singlethread_workqueue("m10mo_gpio_set_ois_wq");
-
+	dev->gpio_set_m10mo_power_on_wq = create_singlethread_workqueue("gpio_set_m10mo_power_on_wq");
+    dev->gpio_set_check_if_m10mo_stream_on_wq = create_singlethread_workqueue("gpio_set_check_if_m10mo_stream_on_wq");
 //    dev->optical_zoom_wq = create_singlethread_workqueue("m10mo_optical_zoom_wq");
 //    dev->auto_focus_wq = create_singlethread_workqueue("m10mo_auto_focus_wq");
 
@@ -9223,7 +9220,8 @@ out_free:
 	destroy_workqueue(dev->cancel_auto_focus_wq);
 	destroy_workqueue(dev->cancel_optical_zoom_wq);
 	destroy_workqueue(dev->auto_update_wq);
-	destroy_workqueue(dev->gpio_set_ois_wq);
+	destroy_workqueue(dev->gpio_set_m10mo_power_on_wq);
+	destroy_workqueue(dev->gpio_set_check_if_m10mo_stream_on_wq);
 	wake_lock_destroy(&dev->m10mo_wake_lock);
 	wake_lock_destroy(&dev->m10mo_update_wake_lock);
 //  destroy_workqueue(dev->optical_zoom_wq);
@@ -9296,7 +9294,7 @@ int m10mo_s_power_fac(int on)
 	        enable_irq(client->irq);
 			dev->disable_irq_flag = 0;
 		}
-		dev->cmd = M10MO_POWERING_ON;
+//		dev->cmd = M10MO_POWERING_ON;
 		ret = power_up(sdd);
 		if (ret)
 			return ret;
@@ -9323,6 +9321,7 @@ int m10mo_s_power_fac(int on)
 
 	} else {
         disable_irq(client->irq);
+		__m10mo_reset_irq_wait_status();
 		dev->disable_irq_flag = 1;
 		ret = power_down(sdd);
 		dev->power = 0;
@@ -9551,10 +9550,104 @@ static void inline m10mo_set_ois_mode(struct v4l2_subdev *sd, m10mo_ois_mode_t o
 	mutex_unlock(&dev->m10mo_ois_work_lock);
 }
 #endif
+
+static void gpio_set_check_if_m10mo_stream_on_work_routine(struct work_struct *ws) {
+
+    struct m10mo_device *dev;
+	dev = to_m10mo_sensor(sdd);
+	printk(KERN_INFO "@%s %d, Start. \n", __func__, __LINE__);
+	if(mutex_is_locked(&dev->input_lock))
+	    return;
+
+    if(!dev->stream) {
+	    m10mo_s_power_fac(0);
+		m10mo_USB_status(0);
+    }
+	printk(KERN_INFO "@%s %d, End. \n", __func__, __LINE__);
+}
+
+static DECLARE_DELAYED_WORK(gpio_set_check_if_m10mo_stream_on_work, gpio_set_check_if_m10mo_stream_on_work_routine);
+
+static void gpio_set_m10mo_power_on_work_routine(struct work_struct *ws) {
+
+    struct m10mo_device *dev;
+	dev = to_m10mo_sensor(sdd);
+	printk(KERN_INFO "@%s %d, Start. \n", __func__, __LINE__);
+
+    if(dev->power
+	    || dev->front_camera_power)
+	    return;
+
+	if(mutex_is_locked(&dev->input_lock))
+	    return;
+
+	mutex_lock(&dev->input_lock);
+	dev->m10mo_gpio_set_after_power_on_before_streaming_flag = 1;
+	m10mo_USB_status(1);
+	__m10mo_s_power(sdd, 1, false);
+	queue_delayed_work(dev->gpio_set_check_if_m10mo_stream_on_wq, &gpio_set_check_if_m10mo_stream_on_work, msecs_to_jiffies(5000));
+	mutex_unlock(&dev->input_lock);
+	printk(KERN_INFO "@%s %d, End. \n", __func__, __LINE__);
+}
+
+static DECLARE_DELAYED_WORK(gpio_set_m10mo_power_on_work, gpio_set_m10mo_power_on_work_routine);
+
+void m10mo_gpio_set_power_on(void) {
+
+    struct m10mo_device *dev;
+	printk(KERN_INFO "@%s %d, Start. \n", __func__, __LINE__);
+	if(sdd == NULL)
+	    return;
+
+	dev = to_m10mo_sensor(sdd);
+    if(dev == NULL)
+	    return;
+
+    if(dev->power
+	    || dev->front_camera_power)
+	    return;
+
+    queue_delayed_work(dev->gpio_set_m10mo_power_on_wq, &gpio_set_m10mo_power_on_work, 0);
+    printk(KERN_INFO "@%s %d, End. \n", __func__, __LINE__);
+}
+
+void notify_m10mo_front_camera_power_status(u8 power) {
+    struct m10mo_device *dev;
+	printk(KERN_INFO "@%s %d, Start. power is %d \n", __func__, __LINE__, power);
+	if(sdd == NULL)
+	    return;
+
+	dev = to_m10mo_sensor(sdd);
+    if(dev == NULL)
+	    return;
+
+	dev->front_camera_power = power;
+}
+
+int m10mo_s_power_for_ov5670(int on) {
+    struct m10mo_device *dev;
+	int ret;
+	dev = to_m10mo_sensor(sdd);
+	printk(KERN_INFO "@%s %d, Start. on is %d\n", __func__, __LINE__, on);
+	if(dev->m10mo_gpio_set_after_power_on_before_streaming_flag) {
+	    dev->m10mo_gpio_set_after_power_on_before_streaming_flag = 0;
+		m10mo_USB_status(0);
+	}
+
+	mutex_lock(&dev->input_lock);
+	ret = m10mo_s_power_fac(on);
+	mutex_unlock(&dev->input_lock);
+	printk(KERN_INFO "@%s %d, End. on is %d\n", __func__, __LINE__, on);
+	return ret;
+}
+
+EXPORT_SYMBOL(notify_m10mo_front_camera_power_status);
+EXPORT_SYMBOL(m10mo_gpio_set_power_on);
 EXPORT_SYMBOL(m10mo_write_fac);
 EXPORT_SYMBOL(m10mo_read_laser);
 EXPORT_SYMBOL(m10mo_read_fac);
 EXPORT_SYMBOL(m10mo_s_power_fac);
+EXPORT_SYMBOL(m10mo_s_power_for_ov5670);
 EXPORT_SYMBOL(m10mo_status_fac);
 module_init(init_m10mo);
 module_exit(exit_m10mo);
