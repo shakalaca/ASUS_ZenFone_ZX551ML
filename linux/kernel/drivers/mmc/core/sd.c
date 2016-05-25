@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
+#include <linux/HWVersion.h>
 
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
@@ -62,6 +63,7 @@ int sd_power_off = 0;
 EXPORT_SYMBOL(sd_power_off);
 extern void mmc_power_off(struct mmc_host *host);
 extern void mmc_power_up(struct mmc_host *host);
+extern int Read_PROJ_ID(void);
 
 /*
  * Given the decoded CSD structure, decode the raw CID to our CID structure.
@@ -1183,9 +1185,11 @@ static int mmc_sd_resume(struct mmc_host *host)
 			printk(KERN_ERR "%s: Re-init card rc = %d (retries = %d)\n",
 			       mmc_hostname(host), err, retries);
 
-			pr_err("%s: resume fialed. Powering off/up sd card again.\n", mmc_hostname(host));
+			pr_err("%s: resume failed. Powering off/up sd card again.\n", mmc_hostname(host));
 			sd_power_off = 1;
 			mmc_power_off(host);
+			if(Read_PROJ_ID() == PROJ_ID_ZX550ML)
+				mmc_delay(50);
 			mmc_power_up(host);
 
 			mdelay(5);

@@ -27,6 +27,7 @@
 #define HW_ID_ER1_1			0x00000005
 #define HW_ID_ER1_2			0x00000006
 #define HW_ID_MP			0x00000007
+#define HW_ID_MP_SD			0x00000006
 
 #define ZE500ML_LCD_ID_BOE		3
 #define ZE500ML_LCD_ID_AUO		4

@@ -927,7 +927,7 @@ static void fts_un_init_gpio_hw(struct ftxxxx_ts_data *ftxxxx_ts)
 static ssize_t virtual_keys_show(struct kobject *kobj,  
              struct kobj_attribute *attr, char *buf)  
 {
-	if (Read_HW_ID() == HW_ID_MP)
+	if (Read_HW_ID() == HW_ID_MP || (Read_PROJ_ID() == PROJ_ID_ZX550ML && Read_HW_ID() == HW_ID_MP_SD))
 	{
 		if (Read_PROJ_ID() == PROJ_ID_ZE550ML)
 		{

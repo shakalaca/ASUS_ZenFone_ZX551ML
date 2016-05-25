@@ -63,6 +63,9 @@ static int lcd_id = ZE550ML_TM_SR;	//default use the TM550 panel
 #define PWMCTRL_SIZE 0x80
 #define PWM_BASE_UNIT 0x1555 //25,000Hz
 
+#define PULL_DOWN_EN			BIT(9)
+#define PULL_UP_EN			BIT(8)
+#define BL_EN_REG 0xFF0C2530
 
 union pwmctrl_reg {
 	struct {
@@ -979,6 +982,7 @@ static int otm1284a_vid_set_brightness(struct mdfld_dsi_config *dsi_config,
 {
 	u32 reg_level;
 	union pwmctrl_reg pwmctrl;
+	static void __iomem *bl_en_mmio;
 
 #ifdef CONFIG_BACKLIGHT_RT4532
 	rt4532_brightness_set(level);
@@ -994,10 +998,13 @@ static int otm1284a_vid_set_brightness(struct mdfld_dsi_config *dsi_config,
 
 	if (!pwmctrl_mmio)
 		pwmctrl_mmio = ioremap_nocache(PWMCTRL_REG, 4);
+	if (!bl_en_mmio)
+		bl_en_mmio = ioremap_nocache(BL_EN_REG, 4);
 
 	if (pwmctrl_mmio) {
 		if (level) {
 			if (!gpio_get_value(backlight_en_gpio)) {
+				writel((readl(bl_en_mmio) | PULL_UP_EN) & (~PULL_DOWN_EN), bl_en_mmio);
 				pmu_set_pwm(PCI_D0);
 				lnw_gpio_set_alt(backlight_pwm_gpio, 1);
 				gpio_set_value_cansleep(backlight_en_gpio, 1);
@@ -1013,6 +1020,7 @@ static int otm1284a_vid_set_brightness(struct mdfld_dsi_config *dsi_config,
 			lnw_gpio_set_alt(backlight_pwm_gpio, 0);
 			usleep_range(10000, 10100);
 			gpio_set_value_cansleep(backlight_en_gpio, 0);
+			writel((readl(bl_en_mmio) | PULL_DOWN_EN) & (~PULL_UP_EN), bl_en_mmio);
 			pmu_set_pwm(PCI_D3hot);
 			printk("[DISP] Disable the backlight PWM!\n");
 		}

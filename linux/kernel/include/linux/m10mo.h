@@ -267,6 +267,7 @@ struct m10mo_device {
 	struct wake_lock m10mo_update_wake_lock;
 	u8 front_camera_power;
 	u8 m10mo_gpio_set_after_power_on_before_streaming_flag;
+	u8 hal_to_driver_power_on;
 //    struct workqueue_struct *optical_zoom_wq;
 //	struct workqueue_struct *auto_focus_wq;
 };

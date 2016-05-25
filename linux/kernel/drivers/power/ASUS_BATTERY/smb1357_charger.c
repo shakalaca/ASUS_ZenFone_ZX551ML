@@ -949,18 +949,22 @@ out:
 
 int smb1357_AC_in_current(void)
 {
-	int ret = 0;
+	int ret = 0, gpio_status=0;;
 
 	CHR_INFO("%s +++\n", __func__);
-	
+
 	if (!smb1357_dev) {
 		CHR_INFO("Warning: smb1357_dev is null due to probe function has error\n");
 		return 1;
 	}
 
 	ret = smb1357_set_writable(smb1357_dev, true);
-	if (ret < 0)
-		goto out;
+	if (ret < 0) {
+		if (Read_PROJ_ID()==PROJ_ID_ZX550ML)
+			goto check_cable_status;
+		else
+			goto out;
+	}
 	if ((Read_HW_ID()==HW_ID_SR1)||(Read_HW_ID()==HW_ID_ER)||(Read_PROJ_ID()==PROJ_ID_ZX550ML)) {
 		if (dcp_mode==1) {
 			//NEED add GPIO control in QC_PMIC_TO_CHARGER
@@ -987,6 +991,8 @@ int smb1357_AC_in_current(void)
 				schedule_delayed_work(&smb1357_dev->query_DCPmode_wrkr, 5*HZ);
 			} else {
 				CHR_INFO("inok high, so ignore detecting charging type action\n");
+				if (Read_PROJ_ID()==PROJ_ID_ZX550ML)
+					goto check_cable_status;
 			}
 		} else {
 			CHR_INFO("dcp_mode=%d, set AC in current without gpio 57 action\n", dcp_mode);
@@ -1011,6 +1017,26 @@ int smb1357_AC_in_current(void)
 		}
 	}
 out:
+	return ret;
+check_cable_status:
+	msleep(1000);
+	gpio_status = gpio_get_value(smb1357_dev->pdata->inok_gpio);
+	CHR_INFO("check inok status = %d\n", gpio_status);
+	ret = smb1357_read(smb1357_dev, RESULT_STATUS_REG);
+	CHR_INFO("check RESULT_STATUS_REG 0x47=0x%02x\n", ret);
+	if  ((!(ret&BIT(1)))&&(gpio_status)) {
+		CHR_INFO("AC_IN but no usb/cable in!\n");
+		gpio_direction_output(smb1357_dev->gpio_chrg_signal, 0);
+		gpio_direction_output(smb1357_dev->gpio_usb_swith, 0);
+		/* clear flag again */
+		dcp_mode=0;
+		hvdcp_mode=0;
+		first_out_flag=0;
+		usb_detect_flag = 0;
+		gpio57_flag = 0;
+		chr_suspend_flag = 0;
+		setSMB1357Charger(CABLE_OUT);
+	}
 	return ret;
 }
 
@@ -1808,7 +1834,7 @@ static void query_DCPmode_worker(struct work_struct *work)
 
 static int cable_status_notify2(struct notifier_block *self, unsigned long action, void *dev)
 {
-	int ret=0;
+	int ret=0, gpio_status=0;
 	uint8_t data=0;
 
 	CHR_INFO("%s: action = %ld\n", __func__, action);
@@ -1847,13 +1873,32 @@ static int cable_status_notify2(struct notifier_block *self, unsigned long actio
 				//gpio_direction_output(smb1357_dev->gpio_chrg_signal, 0);
 				CHR_INFO("%s CHRG_SDP !!!\n", __func__);
 				setSMB1357Charger(USB_IN);
-				if((Read_PROJ_ID()==PROJ_ID_ZX550ML)&&(!usb_detect_flag)) {
-					//WA for USB detect wrong issue
-					CHR_INFO("detect SDP first so set gpio 51 then detect again \n");
-					usb_detect_flag = 1;
-					gpio_direction_output(51, 1);
-					msleep(2000);
-					gpio_direction_output(51, 0);
+				if (Read_PROJ_ID()==PROJ_ID_ZX550ML) {
+					gpio_status = gpio_get_value(smb1357_dev->pdata->inok_gpio);
+					CHR_INFO("check inok status = %d\n", gpio_status);
+					ret = smb1357_read(smb1357_dev, RESULT_STATUS_REG);
+					CHR_INFO("check RESULT_STATUS_REG 0x47=0x%02x\n", ret);
+					if  ((!(ret&BIT(1)))&&(gpio_status)) {
+						CHR_INFO("SDP but no usb/cable in!\n");
+						gpio_direction_output(smb1357_dev->gpio_chrg_signal, 0);
+						gpio_direction_output(smb1357_dev->gpio_usb_swith, 0);
+						/* clear flag again */
+						dcp_mode=0;
+						hvdcp_mode=0;
+						first_out_flag=0;
+						usb_detect_flag = 0;
+						gpio57_flag = 0;
+						chr_suspend_flag = 0;
+						setSMB1357Charger(CABLE_OUT);
+						return NOTIFY_OK;
+					} else if (!usb_detect_flag) {
+						//WA for USB detect wrong issue
+						CHR_INFO("detect SDP first so set gpio 51 then detect again \n");
+						usb_detect_flag = 1;
+						gpio_direction_output(51, 1);
+						msleep(2000);
+						gpio_direction_output(51, 0);
+					}
 				}
 			}
 		break;

@@ -99,7 +99,7 @@ static const struct file_operations sd_power_proc_fops = {
 extern int intel_scu_ipc_ioread8(u16 addr, u8 *data);
 extern int intel_scu_ipc_iowrite8(u16 addr, u8 data);
 extern int sd_power_off;
-
+bool sd_retry_detect = 0;
 /*
  * Internal function. Schedule delayed work in the MMC work queue.
  */
@@ -2616,11 +2616,19 @@ void mmc_rescan(struct work_struct *work)
 				value &= 0xFD;                          //VSWITCHEN Disable
 				intel_scu_ipc_iowrite8(0xAF, value);
 				printk("%s: Set V_3P30_SW to Disable\n", mmc_hostname(host));
+				if(sd_retry_detect == 0 && ((strcmp(mmc_hostname(host), "mmc1") == 0)) && (gpio_get_value(77) == 0)) {
+					pr_err("%s: mmc_rescan fialed, try re-detect sd card\n", mmc_hostname(host));
+					mmc_detect_change(host, msecs_to_jiffies(500));
+				}
+				sd_retry_detect = 1;
 			}
 		}
 		//<ASUS_BSP->
 	}
 	mmc_release_host(host);
+
+	if(i < ARRAY_SIZE(freqs) && ((strcmp(mmc_hostname(host), "mmc1") == 0)))
+		sd_retry_detect = 1;
 
  out:
 	mmc_emergency_setup(host);

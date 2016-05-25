@@ -1903,13 +1903,21 @@ int m10mo_program_device(struct m10mo_device *m10mo_dev, int autoupdate ,u32 ver
 		dev_info(&client->dev, "m10mo version : %x-%x\n", version, dit_version);
 		dev_info(&client->dev, "m10mo read /etc/firmware/M10MO.version : %x-%x\n", sni_fw_file_version, dit_fw_file_version);
 	    }
+#ifdef ZX551ML_USER_BUILD
+	    if((sni_fw_file_version==version) && (dit_fw_file_version==dit_version))
+	    {
+		return -ECANCELED;
+	    }
+#else
 	    if(sni_fw_file_version < version){
 		dev_info(&client->dev, "%x < %x : exit!\n", sni_fw_file_version, version);
 		return -ECANCELED;
 	    }else if(sni_fw_file_version == version && dit_fw_file_version <= dit_version){
 		dev_info(&client->dev, "%x < %x : exit!\n", dit_fw_file_version, dit_version);
 		return -ECANCELED;
-	    }else{
+	    }
+#endif
+	    else{
 	    	fw = m10mo_load_firmware(m10mo_dev, M10MO_DIT_FW_NAME);
 	    	if (!fw){
 		    dev_info(&client->dev, " load %s fail!\n", M10MO_DIT_FW_NAME);

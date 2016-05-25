@@ -85,6 +85,15 @@ static int m10mo_set_optical_zoom_position(struct v4l2_subdev *sd, u32 data);
 static int m10mo_ispd4(struct m10mo_device *dev);
 static u32 get_m10mo_wait_timeout_val(struct v4l2_subdev *sd, u8 requested_cmd);
 extern int m10mo_break_log_loop;
+
+void m10mo_performance_log(const char *trace_log){
+	struct timeval  tv;
+	long int time_in_mill = 0;
+	do_gettimeofday(&tv);
+	time_in_mill = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
+	printk("_PFMS_%s:%ld\n",trace_log,time_in_mill);
+}
+
 #if 0
 void notify_m10mo_atomisp_timeout(){
     struct m10mo_device *dev = to_m10mo_sensor(sdd);
@@ -433,6 +442,7 @@ void startCapture(void){
 	if(dev->capture_mode == M10MO_CAPTURE_MODE_ZSL_BURST){
 	    printk("m10mo, @%s. During Burst mode, not called by atomisp driver. \n", __func__);
 		return;
+
 	}
 	printk("m10mo, @%s, Wait start! called by atomisp driver. \n", __func__);
 
@@ -442,6 +452,7 @@ void startCapture(void){
 	printk("m10mo, @%s, Wait End!  \n", __func__);
     mutex_unlock(&dev->m10mo_request_cmd_lock);
     printk("@%s %d, UNLOCK m10mo_request_cmd_lock.\n", __func__, __LINE__);
+    m10mo_performance_log("CAPTURE_B_KSIGCAP-");
 }
 
 EXPORT_SYMBOL(startCapture);
@@ -2948,7 +2959,7 @@ static int m10mo_s_power(struct v4l2_subdev *sd, int on)
 	    dev->m10mo_gpio_set_after_power_on_before_streaming_flag = 0;
 		m10mo_USB_status(0);
 	}
-
+    dev->hal_to_driver_power_on = on;
 	mutex_lock(&dev->input_lock);
 	ret = __m10mo_s_power(sd, on, false);
 	mutex_unlock(&dev->input_lock);
@@ -3687,6 +3698,7 @@ int m10mo_send_still_capture_cmds(struct v4l2_subdev *sd)
     if(0 && res_cmd <= 0x19) {
         ret = m10mo_writeb(sd, 0x04, 0x42, 0x01);
     }
+    m10mo_performance_log("CAPTURE_B_KSIGCAP+");
     //=== Send command to capture  ===//
     ret = m10mo_writeb(sd, CATEGORY_CAPTURE_CTRL,0x05, 0x01);
 
@@ -3793,7 +3805,9 @@ static int m10mo_burst_run(struct v4l2_subdev *sd)
 
 	switch (dev->run_mode) {
 	case CI_MODE_STILL_CAPTURE:
+        m10mo_performance_log("CAPTURE_B_KBURSTCAP+");
         ret = m10mo_set_burst_capture_streamon(sd);
+        m10mo_performance_log("CAPTURE_B_KBURSTCAP-");
 		break;
     case CI_MODE_PREVIEW:
         printk("@%s %d, preview set monitor mode\n", __func__, __LINE__);
@@ -3833,6 +3847,7 @@ int m10mo_normal_streamoff(struct v4l2_subdev *sd)
 		return 0;
 
     case M10MO_CAP_BETWEEN_1ST_AND_2ND_STREAMOFF_2:
+    	m10mo_performance_log("CAPTURE_B_KCAPSTROFF");
 	    pr_info("m10mo, 2nd fake stream off during capture\n");
 		m10mo_capture_pre_flag = M10MO_NOT_CAPTURE_0;
 		return 0;
@@ -3857,6 +3872,7 @@ static int m10mo_burst_streamoff(struct v4l2_subdev *sd)
 		break;
 
     case M10MO_CAP_BETWEEN_1ST_AND_2ND_STREAMOFF_2:
+    	m10mo_performance_log("CAPTURE_B_KBURSTSTROFF");
 		printk("@%s 2nd real stream off during burst capture. \n", __func__);
 		m10mo_capture_pre_flag = M10MO_NOT_CAPTURE_0;
 		break;
@@ -9123,6 +9139,7 @@ static int m10mo_probe(struct i2c_client *client,
 	dev->cancel_irq_flag = 0;
 	dev->front_camera_power = 0;
 	dev->m10mo_gpio_set_after_power_on_before_streaming_flag = 0;
+	dev->hal_to_driver_power_on = 0;
 
 	mutex_init(&dev->input_lock);
 	mutex_init(&dev->m10mo_request_cmd_lock);
@@ -9284,6 +9301,7 @@ int m10mo_s_power_fac(int on)
 	int ret;
     struct i2c_client *client = v4l2_get_subdevdata(sdd);
 
+    printk(KERN_INFO "%s: on: %d \n", __func__, on);
     dev->m10mo_mode = M10MO_PARAMETER_MODE;
 	if (dev->power == on)
 		return 0;
@@ -9559,7 +9577,7 @@ static void gpio_set_check_if_m10mo_stream_on_work_routine(struct work_struct *w
 	if(mutex_is_locked(&dev->input_lock))
 	    return;
 
-    if(!dev->stream) {
+    if(!dev->hal_to_driver_power_on) {
 	    m10mo_s_power_fac(0);
 		m10mo_USB_status(0);
     }

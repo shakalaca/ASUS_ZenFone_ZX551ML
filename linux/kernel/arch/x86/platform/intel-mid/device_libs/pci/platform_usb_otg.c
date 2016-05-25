@@ -19,6 +19,8 @@
 #include <asm/spid.h>
 #include <asm/intel-mid.h>
 #include <linux/dma-mapping.h>
+#include <linux/HWVersion.h>
+extern int Read_PROJ_ID(void);
 
 #ifdef CONFIG_USB_DWC3_OTG
 #include <linux/usb/dwc3-intel-mid.h>
@@ -46,10 +48,16 @@ void sfi_handle_usb(struct sfi_device_table_entry *pentry, struct devs_id *dev)
 	}
 	for (i = 0; i < ARRAY_SIZE(usb2_el_cal); i++) {
 		if (!strncmp(dev->name, usb2_el_cal[i].name, strlen(dev->name))) {
-			if (!strncmp(dev->name, USB_ULPI_SFI_PREFIX, strlen(USB_ULPI_SFI_PREFIX)))
-				dwc_otg_pdata.ulpi_eye_calibration = usb2_el_cal[i].val;
-			else if (!strncmp(dev->name, USB_UTMI_SFI_PREFIX, strlen(USB_UTMI_SFI_PREFIX)))
-				dwc_otg_pdata.utmi_eye_calibration = usb2_el_cal[i].val;
+			if (!strncmp(dev->name, USB_ULPI_SFI_PREFIX, strlen(USB_ULPI_SFI_PREFIX))){
+			        if((Read_PROJ_ID()==PROJ_ID_ZX550ML) && (i==(ARRAY_SIZE(usb2_el_cal)-1)))
+                                        usb2_el_cal[i].val = 0x53801;
+                                dwc_otg_pdata.ulpi_eye_calibration = usb2_el_cal[i].val;
+                        }
+			else if (!strncmp(dev->name, USB_UTMI_SFI_PREFIX, strlen(USB_UTMI_SFI_PREFIX))){
+			        if((Read_PROJ_ID()==PROJ_ID_ZX550ML) && (i==(ARRAY_SIZE(usb2_el_cal)-1)))
+                                        usb2_el_cal[i].val = 0x53801;
+                                dwc_otg_pdata.utmi_eye_calibration = usb2_el_cal[i].val;
+                        }
 			else
 				pr_info("%s:is Invalid USB SFI Entry Name!\n", dev->name);
 

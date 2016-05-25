@@ -439,7 +439,7 @@ static struct snd_soc_jack_gpio hs_gpio_pr[] = {
 	[MRFLD_HSDET_PR] = {
 		.name			= "JACK_DET_FILTR",
 		.report			= SND_JACK_HEADSET,
-		.debounce_time		= 20,
+		.debounce_time		= 132,
 		.jack_status_check	= mrfld_jack_gpio_pr_detect,
 		.irq_flags		= IRQF_TRIGGER_FALLING |
 					  IRQF_TRIGGER_RISING,

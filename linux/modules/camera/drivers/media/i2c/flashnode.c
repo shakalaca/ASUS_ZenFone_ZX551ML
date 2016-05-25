@@ -843,7 +843,6 @@ int set_torch_on_via_SOC(bool enable){
 		case HW_ID_SR2:
 		case HW_ID_ER:
 		case HW_ID_ER1_1:
-		case HW_ID_ER1_2:
 			printk("[TorchControl] No control due to HW_ID = 0x%x\n", Read_HW_ID());
 			return ret;
 			break;
@@ -1039,10 +1038,10 @@ static int flashnode_gpio_init(struct i2c_client *client)
 				case HW_ID_SR2:
 				case HW_ID_ER:
 				case HW_ID_ER1_1:
-				case HW_ID_ER1_2:
 				case HW_ID_pre_PR:
 				case HW_ID_PR:
 				case HW_ID_MP:
+				case HW_ID_MP_SD:
 					printk("flashnode --> HW_ID = 0x%x\n", Read_HW_ID());
 					printk("flashnode --> PMIC GPIO4CTLO_REG pull high\n");
 					ret = intel_scu_ipc_iowrite8(GPIO4CTLO_REG, 0x31);
@@ -1081,10 +1080,10 @@ static int flashnode_gpio_uninit(struct i2c_client *client)
 				case HW_ID_SR2:
 				case HW_ID_ER:
 				case HW_ID_ER1_1:
-				case HW_ID_ER1_2:
 				case HW_ID_pre_PR:
 				case HW_ID_PR:
 				case HW_ID_MP:
+				case HW_ID_MP_SD:
 					printk("flashnode --> HW_ID = 0x%x\n", Read_HW_ID());
 					printk("flashnode --> PMIC GPIO4CTLO_REG pull low\n");
 					ret = intel_scu_ipc_iowrite8(GPIO4CTLO_REG, 0x30);
@@ -1240,10 +1239,10 @@ static int flashnode_probe(struct i2c_client *client,
 				case HW_ID_SR2:
 				case HW_ID_ER:
 				case HW_ID_ER1_1:
-				case HW_ID_ER1_2:
 				case HW_ID_pre_PR:
 				case HW_ID_PR:
 				case HW_ID_MP:
+				case HW_ID_MP_SD:
 					printk("flashnode --> HW_ID = 0x%x\n", Read_HW_ID());
 					break;
 				default:
